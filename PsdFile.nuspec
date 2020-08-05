@@ -13,6 +13,6 @@
 		<tags>psd, parser</tags>
 	</metadata>
 	<files>
-		<file src="PsdFile\**" target="Source" />
+		<file src="PsdFile\**" target="Editor" />
 	</files>
 </package>
