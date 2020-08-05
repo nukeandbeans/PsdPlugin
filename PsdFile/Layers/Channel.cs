@@ -13,13 +13,12 @@
 //
 /////////////////////////////////////////////////////////////////////////////////
 
-using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Drawing;
 using System.Linq;
-
 using PhotoshopFile.Compression;
+using UnityEngine;
+using Debug = System.Diagnostics.Debug;
 
 namespace PhotoshopFile
 {
@@ -47,11 +46,6 @@ namespace PhotoshopFile
         }
       }
       return idArray;
-    }
-
-    public ChannelList()
-      : base()
-    {
     }
 
     public Channel GetId(int id)
@@ -89,7 +83,7 @@ namespace PhotoshopFile
     /// </summary>
     public short ID { get; set; }
 
-    public Rectangle Rect
+    public Rect Rect
     {
       get
       {
@@ -158,23 +152,6 @@ namespace PhotoshopFile
       Util.DebugMessage(reader.BaseStream, $"Load, End, Channel, {ID}");
     }
 
-    internal void Save(PsdBinaryWriter writer)
-    {
-      Util.DebugMessage(writer.BaseStream, "Save, Begin, Channel");
-
-      writer.Write(ID);
-      if (Layer.PsdFile.IsLargeDocument)
-      {
-        writer.Write(Length);
-      }
-      else
-      {
-        writer.Write((Int32)Length);
-      }
-
-      Util.DebugMessage(writer.BaseStream, $"Save, End, Channel, {ID}");
-    }
-
     //////////////////////////////////////////////////////////////////
 
     internal void LoadPixelData(PsdBinaryReader reader)
@@ -201,7 +178,7 @@ namespace PhotoshopFile
           break;
         case ImageCompression.Rle:
           // RLE row lengths
-          RleRowLengths = new RleRowLengths(reader, Rect.Height,
+          RleRowLengths = new RleRowLengths(reader, (int)Rect.height,
             Layer.PsdFile.IsLargeDocument);
           var rleDataLength = (int)(endPosition - reader.BaseStream.Position);
           Debug.Assert(rleDataLength == RleRowLengths.Total,
@@ -221,7 +198,7 @@ namespace PhotoshopFile
       Util.DebugMessage(reader.BaseStream, $"Load, End, Channel image, {ID}");
       Debug.Assert(reader.BaseStream.Position == endPosition,
         "Pixel data was not fully read in.");
-    }
+    } 
 
     /// <summary>
     /// Decodes the raw image data from the compressed on-disk format into
@@ -230,70 +207,17 @@ namespace PhotoshopFile
     public void DecodeImageData()
     {
       if ((ImageCompression == ImageCompression.Raw)
-        && (Layer.PsdFile.BitDepth <= 8))
+          && (Layer.PsdFile.BitDepth <= 8))
       {
         ImageData = ImageDataRaw;
         return;
       }
 
       var image = ImageDataFactory.Create(this, ImageDataRaw);
-      var longLength = (long)image.BytesPerRow * Rect.Height;
+      var longLength = image.BytesPerRow * (long)Rect.height;
       Util.CheckByteArrayLength(longLength);
       ImageData = new byte[longLength];
       image.Read(ImageData);
     }
-
-    /// <summary>
-    /// Compresses the image data.
-    /// </summary>
-    public void CompressImageData()
-    {
-      // Do not recompress if compressed data is already present.
-      if (ImageDataRaw != null)
-      {
-        return;
-      }
-
-      if (ImageData == null)
-      {
-        return;
-      }
-
-      if (ImageCompression == ImageCompression.Rle)
-      {
-        RleRowLengths = new RleRowLengths(Rect.Height);
-      }
-
-      var compressor = ImageDataFactory.Create(this, null);
-      compressor.Write(ImageData);
-      ImageDataRaw = compressor.ReadCompressed();
-
-      Length = 2 + ImageDataRaw.Length;
-      if (ImageCompression == ImageCompression.Rle)
-      {
-        var rowLengthSize = Layer.PsdFile.IsLargeDocument ? 4 : 2;
-        Length += rowLengthSize * Rect.Height;
-      }
-    }
-
-    internal void SavePixelData(PsdBinaryWriter writer)
-    {
-      Util.DebugMessage(writer.BaseStream, "Save, Begin, Channel image");
-
-      writer.Write((short)ImageCompression);
-      if (ImageDataRaw == null)
-      {
-        return;
-      }
-
-      if (ImageCompression == PhotoshopFile.ImageCompression.Rle)
-      {
-        RleRowLengths.Write(writer, Layer.PsdFile.IsLargeDocument);
-      }
-      writer.Write(ImageDataRaw);
-
-      Util.DebugMessage(writer.BaseStream, $"Save, End, Channel image, {ID}");
-    }
-
   }
 }

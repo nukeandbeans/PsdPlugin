@@ -15,13 +15,14 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using UnityEngine;
+using Debug = System.Diagnostics.Debug;
 
 namespace PhotoshopFile
 {
@@ -45,6 +46,8 @@ namespace PhotoshopFile
 
   public class PsdFile
   {
+    public readonly string Name;
+    
     #region Constructors
 
     public PsdFile(PsdFileVersion version = PsdFileVersion.Psd)
@@ -60,7 +63,9 @@ namespace PhotoshopFile
     public PsdFile(string filename, LoadContext loadContext)
       : this()
     {
-      using (var stream = new FileStream(filename, FileMode.Open))
+      Name = Path.GetFileNameWithoutExtension(filename);
+      //using (var stream = new FileStream(filename, FileMode.Open))
+      using (var stream = new MemoryStream(File.ReadAllBytes(filename)))
       {
         Load(stream, loadContext);
       }
@@ -90,28 +95,7 @@ namespace PhotoshopFile
 
       LoadImage(reader);
       DecompressImages();
-    }
-
-    public void Save(string fileName, Encoding encoding)
-    {
-      using (var stream = new FileStream(fileName, FileMode.Create))
-      {
-        Save(stream, encoding);
-      }
-    }
-
-    public void Save(Stream stream, Encoding encoding)
-    {
-      PrepareSave();
-
-      using (var writer = new PsdBinaryWriter(stream, encoding))
-      {
-        SaveHeader(writer);
-        SaveColorModeData(writer);
-        SaveImageResources(writer);
-        SaveLayerAndMaskInfo(writer);
-        SaveImage(writer);
-      }
+      BuildLayerTree();
     }
 
     #endregion
@@ -164,11 +148,11 @@ namespace PhotoshopFile
     /// </summary>
     public int RowCount
     {
-      get => this.BaseLayer.Rect.Height;
+      get => (int)this.BaseLayer.Rect.height;
       set
       {
         CheckDimension(value);
-        BaseLayer.Rect = new Rectangle(0, 0, BaseLayer.Rect.Width, value);
+        BaseLayer.Rect = new Rect(0, 0, BaseLayer.Rect.width, value);
       }
     }
 
@@ -178,11 +162,11 @@ namespace PhotoshopFile
     /// </summary>
     public int ColumnCount
     {
-      get => this.BaseLayer.Rect.Width;
+      get => (int)this.BaseLayer.Rect.width;
       set
       {
         CheckDimension(value);
-        BaseLayer.Rect = new Rectangle(0, 0, value, BaseLayer.Rect.Height);
+        BaseLayer.Rect = new Rect(0, 0, value, BaseLayer.Rect.height);
       }
     }
 
@@ -246,25 +230,6 @@ namespace PhotoshopFile
       Util.DebugMessage(reader.BaseStream, "Load, End, File header");
     }
 
-    ///////////////////////////////////////////////////////////////////////////
-
-    private void SaveHeader(PsdBinaryWriter writer)
-    {
-      Util.DebugMessage(writer.BaseStream, "Save, Begin, File header");
-
-      string signature = "8BPS";
-      writer.WriteAsciiChars(signature);
-      writer.Write((Int16)Version);
-      writer.Write(new byte[] { 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, });
-      writer.Write(ChannelCount);
-      writer.Write(RowCount);
-      writer.Write(ColumnCount);
-      writer.Write((Int16)BitDepth);
-      writer.Write((Int16)ColorMode);
-
-      Util.DebugMessage(writer.BaseStream, "Save, End, File header");
-    }
-
     #endregion
 
     ///////////////////////////////////////////////////////////////////////////
@@ -291,16 +256,6 @@ namespace PhotoshopFile
       }
 
       Util.DebugMessage(reader.BaseStream, "Load, End, ColorModeData");
-    }
-
-    private void SaveColorModeData(PsdBinaryWriter writer)
-    {
-      Util.DebugMessage(writer.BaseStream, "Save, Begin, ColorModeData");
-
-      writer.Write((UInt32)ColorModeData.Length);
-      writer.Write(ColorModeData);
-
-      Util.DebugMessage(writer.BaseStream, "Save, End, ColorModeData");
     }
 
     #endregion
@@ -349,23 +304,6 @@ namespace PhotoshopFile
       reader.BaseStream.Position = startPosition + imageResourcesLength;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
-
-    private void SaveImageResources(PsdBinaryWriter writer)
-    {
-      Util.DebugMessage(writer.BaseStream, "Save, Begin, ImageResources");
-
-      using (new PsdBlockLengthWriter(writer))
-      {
-        foreach (var imgRes in ImageResources)
-        {
-          imgRes.Save(writer);
-        }
-      }
-
-      Util.DebugMessage(writer.BaseStream, "Save, End, ImageResources");
-    }
-
     #endregion
 
     ///////////////////////////////////////////////////////////////////////////
@@ -373,6 +311,8 @@ namespace PhotoshopFile
     #region LayerAndMaskInfo
 
     public List<Layer> Layers { get; private set; }
+    
+    public List<Layer> LayerTree { get; private set; }
 
     public List<LayerInfo> AdditionalInfo { get; private set; }
 
@@ -411,34 +351,6 @@ namespace PhotoshopFile
 
       Util.DebugMessage(reader.BaseStream, "Load, End, Layer and mask info");
     }
-
-    ///////////////////////////////////////////////////////////////////////////
-
-    private void SaveLayerAndMaskInfo(PsdBinaryWriter writer)
-    {
-      Util.DebugMessage(writer.BaseStream, "Save, Begin, Layer and mask info");
-
-      using (new PsdBlockLengthWriter(writer, IsLargeDocument))
-      {
-        var startPosition = writer.BaseStream.Position;
-
-        SaveLayers(writer);
-        SaveGlobalLayerMask(writer);
-        
-        foreach (var info in AdditionalInfo)
-        {
-          info.Save(writer,
-            globalLayerInfo: true,
-            isLargeDocument: IsLargeDocument);
-        }
-
-        writer.WritePadding(startPosition, 2);
-      }
-
-      Util.DebugMessage(writer.BaseStream, "Save, End, Layer and mask info");
-    }
-
-    ///////////////////////////////////////////////////////////////////////////
 
     /// <summary>
     /// Load Layers Info section, including image data.
@@ -525,224 +437,7 @@ namespace PhotoshopFile
 
     ///////////////////////////////////////////////////////////////////////////
 
-    /// <summary>
-    /// Decompress the document image data and all the layers' image data, in parallel.
-    /// </summary>
-    private void DecompressImages()
-    {
-      var layersAndComposite = Layers.Concat(new[] { BaseLayer });
-      var channels = layersAndComposite.SelectMany(x => x.Channels);
-      Parallel.ForEach(channels, channel =>
-      {
-        channel.DecodeImageData();
-      });
-
-      foreach (var layer in Layers)
-      {
-        foreach (var channel in layer.Channels)
-        {
-          if (channel.ID == -2)
-          {
-            layer.Masks.LayerMask.ImageData = channel.ImageData;
-          }
-          else if (channel.ID == -3)
-          {
-            layer.Masks.UserMask.ImageData = channel.ImageData;
-          }
-        }
-      }
-    }
-
-    /// <summary>
-    /// Check the validity of the PSD file and generate necessary data.
-    /// </summary>
-    public void PrepareSave()
-    {
-      CheckDimension(ColumnCount);
-      CheckDimension(RowCount);
-      VerifyInfoLayers();
-      VerifyLayerSections();
-      
-      var imageLayers = Layers.Concat(new List<Layer>() { this.BaseLayer }).ToList();
-
-      foreach (var layer in imageLayers)
-      {
-        layer.PrepareSave();
-      }
-
-      SetVersionInfo();
-    }
-
-    /// <summary>
-    /// Verifies that any Additional Info layers are consistent.
-    /// </summary>
-    private void VerifyInfoLayers()
-    {
-      var infoLayersCount = AdditionalInfo.Count(x => x is InfoLayers);
-      if (infoLayersCount > 1)
-      {
-        throw new PsdInvalidException(
-          $"Cannot have more than one {nameof(InfoLayers)} in a PSD file.");
-      }
-      if ((infoLayersCount > 0) && (Layers.Count == 0))
-      {
-        throw new PsdInvalidException(
-          $"{nameof(InfoLayers)} cannot exist when there are 0 layers.");
-      }
-    }
-
-    /// <summary>
-    /// Verify validity of layer sections.  Each start marker should have a
-    /// matching end marker.
-    /// </summary>
-    internal void VerifyLayerSections()
-    {
-      int depth = 0;
-      foreach (var layer in Enumerable.Reverse(Layers))
-      {
-        var layerSectionInfo = layer.AdditionalInfo.SingleOrDefault(
-          x => x is LayerSectionInfo);
-        if (layerSectionInfo == null)
-        {
-          continue;
-        }
-
-        var sectionInfo = (LayerSectionInfo)layerSectionInfo;
-        switch (sectionInfo.SectionType)
-        {
-          case LayerSectionType.Layer:
-            break;
-
-          case LayerSectionType.OpenFolder:
-          case LayerSectionType.ClosedFolder:
-            depth++;
-            break;
-
-          case LayerSectionType.SectionDivider:
-            depth--;
-            if (depth < 0)
-            {
-              throw new PsdInvalidException("Layer section ended without matching start marker.");
-            }
-            break;
-
-          default:
-            throw new PsdInvalidException("Unrecognized layer section type.");
-        }
-      }
-
-      if (depth != 0)
-      {
-        throw new PsdInvalidException("Layer section not closed by end marker.");
-      }
-    }
-
-    /// <summary>
-    /// Set the VersionInfo resource on the file.
-    /// </summary>
-    public void SetVersionInfo()
-    {
-      var versionInfo = (VersionInfo)ImageResources.Get(ResourceID.VersionInfo);
-      if (versionInfo == null)
-      {
-        versionInfo = new VersionInfo();
-        ImageResources.Set(versionInfo);
-        
-        // Get the version string.  We don't use the fourth part (revision).
-        var assembly = System.Reflection.Assembly.GetExecutingAssembly();
-        var version = assembly.GetName().Version;
-        var versionString = version.Major + "." + version.Minor + "." + version.Build;
-
-        // Strings are not localized since they are not shown to the user.
-        versionInfo.Version = 1;
-        versionInfo.HasRealMergedData = true;
-        versionInfo.ReaderName = "Paint.NET PSD Plugin";
-        versionInfo.WriterName = "Paint.NET PSD Plugin " + versionString;
-        versionInfo.FileVersion = 1;
-      }
-    }
-
-
-    /// <summary>
-    /// Saves the Layers Info section, including headers and padding.
-    /// </summary>
-    /// <param name="writer">The PSD writer.</param>
-    internal void SaveLayers(PsdBinaryWriter writer)
-    {
-      Util.DebugMessage(writer.BaseStream, "Save, Begin, Layers Info section");
-
-      using (new PsdBlockLengthWriter(writer, IsLargeDocument))
-      {
-        var startPosition = writer.BaseStream.Position;
-
-        // Only one set of Layers can exist in the file.  If layers will be
-        // written to the Additional Info section, then the Layers section
-        // must be empty to avoid conflict.
-        var hasInfoLayers = AdditionalInfo.Exists(x => x is InfoLayers);
-        if (!hasInfoLayers)
-        {
-          SaveLayersData(writer);
-        }
-
-        // Documentation states that the Layers Info section is even-padded,
-        // but it is actually padded to a multiple of 4.
-        writer.WritePadding(startPosition, 4);
-      }
-
-      Util.DebugMessage(writer.BaseStream, "Save, End, Layers Info section");
-    }
-
-    /// <summary>
-    /// Saves the layer data, excluding headers and padding.
-    /// </summary>
-    /// <param name="writer">The PSD writer.</param>
-    internal void SaveLayersData(PsdBinaryWriter writer)
-    {
-      Util.DebugMessage(writer.BaseStream, "Save, Begin, Layers");
-
-      var numLayers = (Int16)Layers.Count;
-      if (AbsoluteAlpha)
-      {
-        numLayers = (Int16)(-numLayers);
-      }
-
-      // Photoshop will not load files that have a layer count of 0 in the
-      // compatible Layers section.  Instead, the Layers section must be
-      // entirely empty.
-      if (numLayers == 0)
-      {
-        return;
-      }
-
-      writer.Write(numLayers);
-      
-      foreach (var layer in Layers)
-      {
-        layer.Save(writer);
-      }
-      
-      foreach (var layer in Layers)
-      {
-        Util.DebugMessage(writer.BaseStream,
-          $"Save, Begin, Layer image, {layer.Name}");
-        foreach (var channel in layer.Channels)
-        {
-          channel.SavePixelData(writer);
-        }
-        Util.DebugMessage(writer.BaseStream,
-          $"Save, End, Layer image, {layer.Name}");
-      }
-
-      // The caller is responsible for padding.  Photoshop writes padded
-      // lengths for compatible layers, but unpadded lengths for Additional
-      // Info layers.
-
-      Util.DebugMessage(writer.BaseStream, "Save, End, Layers");
-    }
-
-    ///////////////////////////////////////////////////////////////////////////
-
-    byte[] GlobalLayerMaskData = new byte[0];
+    private byte[] GlobalLayerMaskData = new byte[0];
 
     private void LoadGlobalLayerMask(PsdBinaryReader reader, long endPosition)
     {
@@ -759,25 +454,6 @@ namespace PhotoshopFile
       }
 
       Util.DebugMessage(reader.BaseStream, "Load, End, GlobalLayerMask");
-    }
-
-    ///////////////////////////////////////////////////////////////////////////
-
-    private void SaveGlobalLayerMask(PsdBinaryWriter writer)
-    {
-      Util.DebugMessage(writer.BaseStream, "Save, Begin, GlobalLayerMask");
-
-      if (AdditionalInfo.Exists(x => x.Key == "LMsk"))
-      {
-        writer.Write((UInt32)0);
-      }
-      else
-      {
-        writer.Write((UInt32)GlobalLayerMaskData.Length);
-        writer.Write(GlobalLayerMaskData);
-      }
-
-      Util.DebugMessage(writer.BaseStream, "Save, End, GlobalLayerMask");
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -809,7 +485,7 @@ namespace PhotoshopFile
         var channel = new Channel(i, this.BaseLayer);
         channel.ImageCompression = ImageCompression;
         channel.Length = this.RowCount
-          * Util.BytesPerRow(BaseLayer.Rect.Size, BitDepth);
+          * Util.BytesPerRow(BaseLayer.Rect.size, BitDepth);
 
         // The composite image stores all RLE headers up-front, rather than
         // with each channel.
@@ -844,29 +520,132 @@ namespace PhotoshopFile
     }
 
     ///////////////////////////////////////////////////////////////////////////
-
-    private void SaveImage(PsdBinaryWriter writer)
+    
+    /// <summary>
+    /// Decompress the document image data and all the layers' image data, in parallel.
+    /// </summary>
+    private void DecompressImages()
     {
-      Util.DebugMessage(writer.BaseStream, "Save, Begin, Composite image");
-
-      writer.Write((short)this.ImageCompression);
-      if (this.ImageCompression == PhotoshopFile.ImageCompression.Rle)
+      var layersAndComposite = Layers.Concat(new[] { BaseLayer });
+      var channels = layersAndComposite.SelectMany(x => x.Channels);
+      Parallel.ForEach(channels, channel =>
       {
-        foreach (var channel in this.BaseLayer.Channels)
+        channel.DecodeImageData();
+      });
+
+      foreach (var layer in Layers)
+      {
+        foreach (var channel in layer.Channels)
         {
-          Util.DebugMessage(writer.BaseStream, "Save, Begin, RLE header");
-          channel.RleRowLengths.Write(writer, IsLargeDocument);
-          Util.DebugMessage(writer.BaseStream, "Save, End, RLE header");
+          if (channel.ID == -2)
+          {
+            layer.Masks.LayerMask.ImageData = channel.ImageData;
+          }
+          else if (channel.ID == -3)
+          {
+            layer.Masks.UserMask.ImageData = channel.ImageData;
+          }
         }
       }
-      foreach (var channel in this.BaseLayer.Channels)
+    }
+    
+    /// <summary>
+    /// Constructs a tree collection based on the PSD layer groups from the raw list of layers.
+    /// </summary>
+    /// <returns>The layers reorganized into a tree structure based on the layer groups.</returns>
+    private void BuildLayerTree()
+    {
+      LayerTree = new List<Layer>();
+      Layer currentGroupLayer = null;
+      var previousLayers = new Stack<Layer>();
+      var allFolders = new List<Layer>();
+
+      // PSD layers are stored backwards (with End Groups before Start Groups), so we must reverse them
+      for (var i = Layers.Count - 1; i >= 0; i--)
       {
-        Util.DebugMessage(writer.BaseStream, "Save, Begin, Channel image data");
-        writer.Write(channel.ImageDataRaw);
-        Util.DebugMessage(writer.BaseStream, "Save, End, Channel image data");
+        var layer = Layers[i];
+        
+        if (layer.IsEndGroup())
+        {
+          if (previousLayers.Count > 0)
+          {
+            currentGroupLayer = previousLayers.Pop();
+          }
+          else if (currentGroupLayer != null)
+          {
+            LayerTree.Add(currentGroupLayer);
+            currentGroupLayer = null;
+          }
+        }
+        else if (layer.IsFolder)
+        {
+          // push the current layer
+          if (currentGroupLayer != null)
+          {
+            currentGroupLayer.Children.Add(layer);
+            layer.Parent = currentGroupLayer;
+          }
+          else
+          {
+            LayerTree.Add(layer);
+          }
+
+          previousLayers.Push(currentGroupLayer);
+          allFolders.Add(layer);
+          currentGroupLayer = layer;
+        }
+        else if (layer.Rect.width != 0 && layer.Rect.height != 0)
+        {
+          // It must be a text layer or image layer
+          if (currentGroupLayer != null)
+          {
+            currentGroupLayer.Children.Add(layer);
+            layer.Parent = currentGroupLayer;
+          }
+          else
+          {
+            LayerTree.Add(layer);
+          }
+        }
       }
 
-      Util.DebugMessage(writer.BaseStream, "Save, End, Composite image");
+      // if there are any dangling layers, add them to the tree
+      if (LayerTree.Count == 0 && currentGroupLayer != null && currentGroupLayer.Children.Count > 0)
+      {
+        LayerTree.Add(currentGroupLayer);
+      }
+
+      for (var i = allFolders.Count - 1; i >=0; i--)
+      {
+        RevisitSizeOfLayer(allFolders[i]);
+      }
+    }
+    
+    private static void RevisitSizeOfLayer(Layer layer)
+    {
+      if (layer == null || !layer.IsFolder) return;
+
+      var maxWidth = layer.Rect.width;
+      var maxHeight = layer.Rect.height;
+      var minY = float.MaxValue;
+      var minX = float.MaxValue;
+
+      for (var i = 0; i < layer.Children.Count; i++)
+      {
+        var children = layer.Children[i];
+        if (children.Rect.height> maxHeight) maxHeight = children.Rect.height;
+        if (children.Rect.width> maxWidth) maxWidth = children.Rect.width;
+        if (children.Rect.y < minY) minY = children.Rect.y;
+        if (children.Rect.x < minX) minX = children.Rect.x;
+      }
+			
+      for (var i = 0; i < layer.Children.Count; i++)
+      {
+        var children = layer.Children[i];
+        children.Rect = new Rect(children.Rect.x - minX, children.Rect.y - minY, children.Rect.width, children.Rect.height);
+      }
+
+      layer.Rect = new Rect(minX, minY, maxWidth, maxHeight);
     }
 
     #endregion

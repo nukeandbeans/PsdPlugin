@@ -10,7 +10,6 @@
 //
 /////////////////////////////////////////////////////////////////////////////////
 
-using System;
 using System.Linq;
 
 namespace PhotoshopFile
@@ -40,21 +39,6 @@ namespace PhotoshopFile
         Values[i] = isLargeDocument
           ? reader.ReadInt32()
           : reader.ReadUInt16();
-      }
-    }
-
-    public void Write(PsdBinaryWriter writer, bool isLargeDocument)
-    {
-      for (int i = 0; i < Values.Length; i++)
-      {
-        if (isLargeDocument)
-        {
-          writer.Write(Values[i]);
-        }
-        else
-        {
-          writer.Write((UInt16)Values[i]);
-        }
       }
     }
   }

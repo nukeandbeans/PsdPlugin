@@ -11,8 +11,7 @@
 /////////////////////////////////////////////////////////////////////////////////
 
 using System;
-using System.Drawing;
-using System.IO.Compression;
+using UnityEngine;
 
 namespace PhotoshopFile.Compression
 {
@@ -22,7 +21,7 @@ namespace PhotoshopFile.Compression
 
     protected override bool AltersWrittenData => true;
 
-    public ZipPredict16Image(byte[] zipData, Size size)
+    public ZipPredict16Image(byte[] zipData, Vector2 size)
       : base(size, 16)
     {
       // 16-bitdepth images are delta-encoded word-by-word.  The deltas
@@ -53,52 +52,15 @@ namespace PhotoshopFile.Compression
       return zipImage.ReadCompressed();
     }
 
-    internal override void WriteInternal(byte[] array)
-    {
-      if (array.Length == 0)
-      {
-        return;
-      }
-
-      unsafe
-      {
-        fixed (byte* ptrData = &array[0])
-        {
-          Predict((UInt16*)ptrData);
-        }
-      }
-
-      zipImage.WriteInternal(array);
-    }
-
-    unsafe private void Predict(UInt16* ptrData)
-    {
-      // Delta-encode each row
-      for (int i = 0; i < Size.Height; i++)
-      {
-        UInt16* ptrDataRow = ptrData;
-        UInt16* ptrDataRowEnd = ptrDataRow + Size.Width;
-
-        // Start with the last column in the row
-        ptrData = ptrDataRowEnd - 1;
-        while (ptrData > ptrDataRow)
-        {
-          *ptrData -= *(ptrData - 1);
-          ptrData--;
-        }
-        ptrData = ptrDataRowEnd;
-      }
-    }
-
     /// <summary>
     /// Unpredicts the decompressed, native-endian image data.
     /// </summary>
     unsafe private void Unpredict(UInt16* ptrData)
     {
       // Delta-decode each row
-      for (int i = 0; i < Size.Height; i++)
+      for (int i = 0; i < Size.y; i++)
       {
-        UInt16* ptrDataRowEnd = ptrData + Size.Width;
+        UInt16* ptrDataRowEnd = ptrData + (int)Size.x;
 
         // Start with column index 1 on each row
         ptrData++;

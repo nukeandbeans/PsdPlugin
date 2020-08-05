@@ -11,7 +11,7 @@
 /////////////////////////////////////////////////////////////////////////////////
 
 using System;
-using System.Drawing;
+using UnityEngine;
 
 namespace PhotoshopFile.Compression
 {
@@ -21,7 +21,7 @@ namespace PhotoshopFile.Compression
 
     protected override bool AltersWrittenData => false;
 
-    public RawImage(byte[] data, Size size, int bitDepth)
+    public RawImage(byte[] data, Vector2 size, int bitDepth)
       : base(size, bitDepth)
     {
       this.data = data;
@@ -35,11 +35,6 @@ namespace PhotoshopFile.Compression
     public override byte[] ReadCompressed()
     {
       return data;
-    }
-
-    internal override void WriteInternal(byte[] array)
-    {
-      data = array;
     }
   }
 }

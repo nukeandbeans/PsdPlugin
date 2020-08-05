@@ -41,13 +41,5 @@ namespace PhotoshopFile
         ChannelNames.Add(channelName);
       }
     }
-
-    protected override void WriteData(PsdBinaryWriter writer)
-    {
-      foreach (var channelName in ChannelNames)
-      {
-        writer.WritePascalString(channelName, 1);
-      }
-    }
   }
 }

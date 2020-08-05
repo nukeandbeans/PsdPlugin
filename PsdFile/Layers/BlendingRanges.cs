@@ -13,10 +13,6 @@
 //
 /////////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics;
-using System.Globalization;
-
 namespace PhotoshopFile
 {
   public class BlendingRanges
@@ -52,24 +48,6 @@ namespace PhotoshopFile
       Data = reader.ReadBytes(dataLength);
 
       Util.DebugMessage(reader.BaseStream, "Load, End, BlendingRanges");
-    }
-
-    ///////////////////////////////////////////////////////////////////////////
-
-    public void Save(PsdBinaryWriter writer)
-    {
-      Util.DebugMessage(writer.BaseStream, "Save, Begin, BlendingRanges");
-
-      if (Data == null)
-      {
-        writer.Write((UInt32)0);
-        return;
-      }
-
-      writer.Write((UInt32)Data.Length);
-      writer.Write(Data);
-
-      Util.DebugMessage(writer.BaseStream, "Save, End, BlendingRanges");
     }
   }
 }

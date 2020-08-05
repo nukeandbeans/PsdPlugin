@@ -10,10 +10,6 @@
 //
 /////////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.IO;
-using System.Drawing;
-
 namespace PhotoshopFile
 {
   /// <summary>
@@ -40,11 +36,5 @@ namespace PhotoshopFile
       this.id = resourceId;
       Data = reader.ReadBytes(numBytes);
     }
-    
-    protected override void WriteData(PsdBinaryWriter writer)
-    {
-      writer.Write(Data);
-    }
-
   }
 }

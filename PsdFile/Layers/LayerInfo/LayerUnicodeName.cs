@@ -10,8 +10,6 @@
 //
 /////////////////////////////////////////////////////////////////////////////////
 
-using System;
-
 namespace PhotoshopFile
 {
   public class LayerUnicodeName : LayerInfo
@@ -30,14 +28,6 @@ namespace PhotoshopFile
     public LayerUnicodeName(PsdBinaryReader reader)
     {
       Name = reader.ReadUnicodeString();
-    }
-
-    protected override void WriteData(PsdBinaryWriter writer)
-    {
-      var startPosition = writer.BaseStream.Position;
-
-      writer.WriteUnicodeString(Name);
-      writer.WritePadding(startPosition, 4);
     }
   }
 }

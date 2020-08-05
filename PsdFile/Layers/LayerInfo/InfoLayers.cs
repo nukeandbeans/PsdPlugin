@@ -10,12 +10,6 @@
 //
 /////////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
 namespace PhotoshopFile
 {
   /// <summary>
@@ -76,11 +70,6 @@ namespace PhotoshopFile
         throw new PsdInvalidException(
           $"Incorrect length for {nameof(InfoLayers)}.");
       }
-    }
-
-    protected override void WriteData(PsdBinaryWriter writer)
-    {
-      PsdFile.SaveLayersData(writer);
     }
   }
 }

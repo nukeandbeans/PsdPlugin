@@ -17,6 +17,8 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Text;
+using UnityEngine;
+using Debug = System.Diagnostics.Debug;
 
 namespace PhotoshopFile
 {
@@ -29,13 +31,6 @@ namespace PhotoshopFile
       public int Bottom { get; set; }
       public int Left { get; set; }
       public int Right { get; set; }
-    }
-
-    public static Rectangle IntersectWith(
-      this Rectangle thisRect, Rectangle rect)
-    {
-      thisRect.Intersect(rect);
-      return thisRect;
     }
 
     /////////////////////////////////////////////////////////////////////////// 
@@ -194,14 +189,14 @@ namespace PhotoshopFile
     /// <param name="size">The size of the image in pixels.</param>
     /// <param name="bitDepth">The bit depth of the image.</param>
     /// <returns>The number of bytes needed to store a row of the image.</returns>
-    public static int BytesPerRow(Size size, int bitDepth)
+    public static int BytesPerRow(Vector2 size, int bitDepth)
     {
       switch (bitDepth)
       {
         case 1:
-          return (size.Width + 7) / 8;
+          return ((int)size.x + 7) / 8;
         default:
-          return size.Width * BytesFromBitDepth(bitDepth);
+          return (int)size.x * BytesFromBitDepth(bitDepth);
       }
     }
 

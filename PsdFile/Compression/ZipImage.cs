@@ -11,9 +11,9 @@
 /////////////////////////////////////////////////////////////////////////////////
 
 using System;
-using System.Drawing;
 using System.IO;
 using System.IO.Compression;
+using UnityEngine;
 
 namespace PhotoshopFile.Compression
 {
@@ -24,7 +24,7 @@ namespace PhotoshopFile.Compression
 
     protected override bool AltersWrittenData => false;
 
-    public ZipImage(byte[] data, Size size, int bitDepth)
+    public ZipImage(byte[] data, Vector2 size, int bitDepth)
       : base(size, bitDepth)
     {
       if (data == null)
@@ -72,7 +72,7 @@ namespace PhotoshopFile.Compression
 
     internal override void Read(byte[] buffer)
     {
-      var bytesToRead = (long)Size.Height * BytesPerRow;
+      var bytesToRead = (long)Size.y * BytesPerRow;
       Util.CheckByteArrayLength(bytesToRead);
 
       var bytesRead = zipStream.Read(buffer, 0, (int)bytesToRead);
@@ -92,11 +92,6 @@ namespace PhotoshopFile.Compression
         ? new byte[0]
         : zipDataStream.ToArray();
       return result;
-    }
-
-    internal override void WriteInternal(byte[] array)
-    {
-      zipStream.Write(array, 0, array.Length);
     }
   }
 }

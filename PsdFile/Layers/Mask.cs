@@ -13,11 +13,8 @@
 //
 /////////////////////////////////////////////////////////////////////////////////
 
-using System;
 using System.Collections.Specialized;
-using System.Diagnostics;
-using System.Drawing;
-using System.Globalization;
+using UnityEngine;
 
 namespace PhotoshopFile
 {
@@ -31,7 +28,7 @@ namespace PhotoshopFile
     /// <summary>
     /// The rectangle enclosing the mask.
     /// </summary>
-    public Rectangle Rect { get; set; }
+    public Rect Rect { get; set; }
 
     private byte backgroundColor;
     public byte BackgroundColor
@@ -89,7 +86,7 @@ namespace PhotoshopFile
       this.flags = new BitVector32();
     }
 
-    public Mask(Layer layer, Rectangle rect, byte color, BitVector32 flags)
+    public Mask(Layer layer, Rect rect, byte color, BitVector32 flags)
     {
       Layer = layer;
       Rect = rect;
@@ -148,40 +145,5 @@ namespace PhotoshopFile
 
       Util.DebugMessage(reader.BaseStream, "Load, End, MaskInfo");
     }
-
-    ///////////////////////////////////////////////////////////////////////////
-
-    public void Save(PsdBinaryWriter writer)
-    {
-      Util.DebugMessage(writer.BaseStream, "Save, Begin, MaskInfo");
-
-      if (LayerMask == null)
-      {
-        writer.Write((UInt32)0);
-        return;
-      }
-
-      using (new PsdBlockLengthWriter(writer))
-      {
-        writer.Write(LayerMask.Rect);
-        writer.Write(LayerMask.BackgroundColor);
-        writer.Write((byte)LayerMask.Flags.Data);
-
-        if (UserMask == null)
-        {
-          // Pad by 2 bytes to make the block length 20
-          writer.Write((UInt16)0);
-        }
-        else
-        {
-          writer.Write((byte)UserMask.Flags.Data);
-          writer.Write(UserMask.BackgroundColor);
-          writer.Write(UserMask.Rect);
-        }
-      }
-
-      Util.DebugMessage(writer.BaseStream, "Save, End, MaskInfo");
-    }
-
   }
 }

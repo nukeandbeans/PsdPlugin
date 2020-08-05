@@ -14,9 +14,10 @@
 /////////////////////////////////////////////////////////////////////////////////
 
 using System;
-using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Text;
+using UnityEngine;
 
 namespace PhotoshopFile
 {
@@ -119,6 +120,47 @@ namespace PhotoshopFile
       }
       return val;
     }
+    
+    public double ReadDouble()
+    {
+      var num = ReadUInt64();
+      return BitConverter.Int64BitsToDouble((long)num);
+    }
+
+    /// <summary>
+    /// Reads a floating point number from the stream.  It reads until the newline character '\n' is found.
+    /// </summary>
+    /// <returns>The read floating point number.</returns>
+    public float ReadFloat()
+    {
+      var str = string.Empty;
+
+      try
+      {
+        for (var index = reader.PeekChar(); index != 10; index = reader.PeekChar())
+        {
+          if (index != 32)
+          {
+            str = str + reader.ReadChar();
+          }
+          else
+          {
+            break;
+          }
+        }
+      }
+      catch (ArgumentException)
+      {
+        Debug.LogError("An invalid character was found in the string.");
+      }
+
+      if (string.IsNullOrEmpty(str))
+      {
+        return 0.0f;
+      }
+
+      return Convert.ToSingle(str, CultureInfo.InvariantCulture);
+    }
 
     //////////////////////////////////////////////////////////////////
 
@@ -135,14 +177,43 @@ namespace PhotoshopFile
       ReadBytes(padBytes);
     }
 
-    public Rectangle ReadRectangle()
+    public Rect ReadRectangle()
     {
-      var rect = new Rectangle();
-      rect.Y = ReadInt32();
-      rect.X = ReadInt32();
-      rect.Height = ReadInt32() - rect.Y;
-      rect.Width = ReadInt32() - rect.X;
+      var rect = new Rect();
+      rect.y = ReadInt32();
+      rect.x = ReadInt32();
+      rect.height = ReadInt32() - rect.y;
+      rect.width = ReadInt32() - rect.x;
       return rect;
+    }
+    
+    /// <summary>
+    /// Reads a string stored with a null byte preceding each character.
+    /// </summary>
+    /// <returns>The read string.</returns>
+    public string ReadString()
+    {
+      var str = string.Empty;
+      try
+      {
+        while (BaseStream.Position < BaseStream.Length)
+        {
+          if (reader.ReadChar() == 0)
+          {
+            str = str + (char)ReadByte();
+          }
+          else
+          {
+            break;
+          }
+        }
+      }
+      catch (ArgumentException)
+      {
+        Debug.LogError("An invalid character was found in the string.");
+      }
+
+      return str;
     }
 
     /// <summary>
@@ -159,7 +230,7 @@ namespace PhotoshopFile
     /// Read a Pascal string using the specified encoding.
     /// </summary>
     /// <param name="padMultiple">Byte multiple that the Pascal string is padded to.</param>
-    public string ReadPascalString(int padMultiple)
+    public string ReadPascalString(int padMultiple = 2)
     {
       var startPosition = reader.BaseStream.Position;
 
@@ -181,6 +252,50 @@ namespace PhotoshopFile
       var str = Encoding.BigEndianUnicode.GetString(data, 0, length);
 
       return str;
+    }
+    
+    /// <summary>
+    /// Searches through the stream for the given string.  If found, the position in the stream
+    /// will be the byte right AFTER the search string.  If it is not found, the position will be the
+    /// end of the stream.
+    /// </summary>
+    /// <param name="search">The string to search for.</param>
+    public void Seek(string search)
+    {
+      var bytes = Encoding.ASCII.GetBytes(search);
+      Seek(bytes);
+    }
+    
+    /// <summary>
+    /// Searches through the stream for the given byte array.  If found, the position in the stream
+    /// will be the byte right AFTER the search array.  If it is not found, the position will be the
+    /// end of the stream.
+    /// </summary>
+    /// <param name="search">The byte array sequence to search for in the stream</param>
+    private void Seek(byte[] search)
+    {
+      // read continuously until we find the first byte
+      while (BaseStream.Position < BaseStream.Length && ReadByte() != search[0])
+      {
+        // do nothing
+      }
+
+      // ensure we haven't reached the end of the stream
+      if (BaseStream.Position >= BaseStream.Length)
+      {
+        return;
+      }
+
+      // ensure we have found the entire byte sequence
+      for (var index = 1; index < search.Length; ++index)
+      {
+        if (ReadByte() != search[index])
+        {
+          // if the sequence doesn't match fully, try seeking for it again
+          Seek(search);
+          break;
+        }
+      }
     }
 
     //////////////////////////////////////////////////////////////////

@@ -10,9 +10,7 @@
 //
 /////////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Drawing;
-using System.IO.Compression;
+using UnityEngine;
 
 namespace PhotoshopFile.Compression
 {
@@ -22,11 +20,11 @@ namespace PhotoshopFile.Compression
 
     public int BytesPerRow { get; private set; }
 
-    public Size Size { get; private set; }
+    public Vector2 Size { get; private set; }
 
     protected abstract bool AltersWrittenData { get; }
 
-    protected ImageData(Size size, int bitDepth)
+    protected ImageData(Vector2 size, int bitDepth)
     {
       Size = size;
       BitDepth = bitDepth;
@@ -38,7 +36,7 @@ namespace PhotoshopFile.Compression
     /// </summary>
     public virtual byte[] Read()
     {
-      var imageLongLength = (long)BytesPerRow * Size.Height;
+      var imageLongLength = BytesPerRow * (long)Size.y;
       Util.CheckByteArrayLength(imageLongLength);
 
       var buffer = new byte[imageLongLength];
@@ -52,29 +50,5 @@ namespace PhotoshopFile.Compression
     /// Reads compressed image data.
     /// </summary>
     public abstract byte[] ReadCompressed();
-
-    /// <summary>
-    /// Writes rows of image data into compressed format.
-    /// </summary>
-    /// <param name="array">An array containing the data to be compressed.</param>
-    public void Write(byte[] array)
-    {
-      var imageLength = (long)BytesPerRow * Size.Height;
-      if (array.Length != imageLength)
-      {
-        throw new ArgumentException(
-          "Array length is not equal to image length.",
-          nameof(array));
-      }
-
-      if (AltersWrittenData)
-      {
-        array = (byte[])array.Clone();
-      }
-      
-      WriteInternal(array);
-    }
-
-    internal abstract void WriteInternal(byte[] array);
   }
 }

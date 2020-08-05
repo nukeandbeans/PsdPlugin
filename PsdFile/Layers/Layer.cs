@@ -17,11 +17,10 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Diagnostics;
-using System.Drawing;
-using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Threading;
+using PhotoshopFile.Enums;
+using UnityEngine;
 
 namespace PhotoshopFile
 {
@@ -34,12 +33,30 @@ namespace PhotoshopFile
     /// <summary>
     /// The rectangle containing the contents of the layer.
     /// </summary>
-    public Rectangle Rect { get; set; }
+    public Rect Rect { get; set; }
+    
+    /// <summary>
+    /// A list of the children Layer that belong to this Layer.
+    /// </summary>
+    public readonly List<Layer> Children = new List<Layer>();
+
+    /// <summary>
+    /// Folder layer holding this layer. Null for root layers.
+    /// </summary>
+    public Layer Parent;
 
     /// <summary>
     /// Image channels.
     /// </summary>
     public ChannelList Channels { get; private set; }
+    
+    /// <summary>
+    /// All channels used.
+    /// 0 = red, 1 = green, etc.
+    /// –1 = transparency mask
+    /// –2 = user supplied layer mask
+    /// </summary>
+    public readonly Channel Channel0, Channel1, Channel2, Channel3, ChannelN1, ChannelN2;
 
     /// <summary>
     /// Returns alpha channel if it exists, otherwise null.
@@ -77,6 +94,19 @@ namespace PhotoshopFile
     private static int protectTransBit = BitVector32.CreateMask();
     private static int visibleBit = BitVector32.CreateMask(protectTransBit);
     BitVector32 flags = new BitVector32();
+    
+    public readonly bool IsFolder;
+    public readonly bool IsTextLayer;
+    
+    /// <summary>
+    /// Returns true if the given <see cref="Layer"/> is marking the end of a layer group.
+    /// </summary>
+    /// <param name="layer">The <see cref="Layer"/> to check if it's the end of a group.</param>
+    /// <returns>True if the layer ends a group, otherwise false.</returns>
+    public bool IsEndGroup()
+    {
+      return (Name.Contains("</Layer set>") || Name.Contains("</Layer group>") || (Name == " copy" && Rect.height == 0));
+    }
 
     /// <summary>
     /// If true, the layer is visible.
@@ -107,12 +137,48 @@ namespace PhotoshopFile
 
     public List<LayerInfo> AdditionalInfo { get; set; }
 
+    /// <summary>
+    /// Gets the actual text string, if this is a text layer.
+    /// </summary>
+    public string Text { get; private set; }
+    
+    /// <summary>
+    /// Gets the actual text string, if this is a text layer.
+    /// </summary>
+    public float TextScale { get; private set; }
+
+    /// <summary>
+    /// Gets the point size of the font, if this is a text layer.
+    /// </summary>
+    public float FontSize { get; private set; }
+
+    /// <summary>
+    /// Gets the name of the font used, if this is a text layer.
+    /// </summary>
+    public string FontName { get; private set; }
+
+    /// <summary>
+    /// Gets the justification of the text, if this is a text layer.
+    /// </summary>
+    public TextJustification Justification { get; private set; }
+
+    /// <summary>
+    /// Gets the Fill Color of the text, if this is a text layer.
+    /// </summary>
+    public Color FillColor { get; private set; }
+
+    /// <summary>
+    /// Gets the style of warp done on the text, if it is a text layer.
+    /// Can be warpNone, warpTwist, etc.
+    /// </summary>
+    public string WarpStyle { get; private set; }
+
     ///////////////////////////////////////////////////////////////////////////
 
     public Layer(PsdFile psdFile)
     {
       PsdFile = psdFile;
-      Rect = Rectangle.Empty;
+      Rect = Rect.zero;
       Channels = new ChannelList();
       BlendModeKey = PsdBlendMode.Normal;
       AdditionalInfo = new List<LayerInfo>();
@@ -131,6 +197,16 @@ namespace PhotoshopFile
       {
         var ch = new Channel(reader, this);
         Channels.Add(ch);
+        
+        switch (ch.ID)
+        {
+          case 0: Channel0 = ch; break;
+          case 1: Channel1 = ch; break;
+          case 2: Channel2 = ch; break;
+          case 3: Channel3 = ch; break;
+          case -1: ChannelN1 = ch; break;
+          case -2: ChannelN2 = ch; break;
+        }
       }
 
       // Layer blending
@@ -165,12 +241,77 @@ namespace PhotoshopFile
           case "luni":
             Name = ((LayerUnicodeName)adjustmentInfo).Name;
             break;
+          case "lsct":
+          case "lsdk":
+            var sectionInfo = (LayerSectionInfo)adjustmentInfo;
+            IsFolder = sectionInfo.SectionType == LayerSectionType.OpenFolder || sectionInfo.SectionType == LayerSectionType.ClosedFolder;
+            break;
+          case "TySh":
+            IsTextLayer = true;
+            ReadTextLayer(new PsdBinaryReader(new MemoryStream(((RawLayerInfo)adjustmentInfo).Data), reader));
+            break;
         }
       }
 
       Util.DebugMessage(reader.BaseStream, $"Load, End, Layer, {Name}");
 
       PsdFile.LoadContext.OnLoadLayerHeader(this);
+    }
+    
+    /// <summary>
+    /// Reads the text information for the layer.
+    /// </summary>
+    /// <param name="dataReader">The reader to use to read the text data.</param>
+    private void ReadTextLayer(PsdBinaryReader dataReader)
+    {
+      // read the text layer's text string
+      dataReader.ReadBytes(26); // 2 for version, 8 for xx, xy, yx
+      TextScale = (float)dataReader.ReadDouble(); // yy
+      dataReader.Seek("/Text");
+      dataReader.ReadBytes(4);
+      Text = dataReader.ReadString();
+
+      // read the text justification
+      dataReader.Seek("/Justification ");
+      int justification = dataReader.ReadByte() - 48;
+      Justification = TextJustification.Left;
+      if (justification == 1)
+      {
+        Justification = TextJustification.Right;
+      }
+      else if (justification == 2)
+      {
+        Justification = TextJustification.Center;
+      }
+
+      // read the font size
+      dataReader.Seek("/FontSize ");
+      FontSize = dataReader.ReadFloat();
+
+      // read the font fill color
+      dataReader.Seek("/FillColor");
+      dataReader.Seek("/Values [ ");
+      float alpha = dataReader.ReadFloat();
+      dataReader.ReadByte();
+      float red = dataReader.ReadFloat();
+      dataReader.ReadByte();
+      float green = dataReader.ReadFloat();
+      dataReader.ReadByte();
+      float blue = dataReader.ReadFloat();
+      FillColor = new Color(red, green, blue, alpha);
+
+      // read the font name
+      dataReader.Seek("/FontSet ");
+      dataReader.Seek("/Name");
+      dataReader.ReadBytes(4);
+      FontName = dataReader.ReadString();
+
+      // read the warp style
+      dataReader.Seek("warpStyle");
+      dataReader.Seek("warpStyle");
+      dataReader.ReadBytes(3);
+      int num13 = dataReader.ReadByte();
+      WarpStyle = dataReader.ReadAsciiChars(num13);
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -185,7 +326,7 @@ namespace PhotoshopFile
       {
         if (!this.Channels.ContainsId(id))
         {
-          var size = this.Rect.Height * this.Rect.Width;
+          var size = (int)this.Rect.height * (int)this.Rect.width;
 
           var ch = new Channel(id, this);
           ch.ImageData = new byte[size];
@@ -204,84 +345,6 @@ namespace PhotoshopFile
           this.Channels.Add(ch);
         }
       }
-    }
-
-    ///////////////////////////////////////////////////////////////////////////
-
-    public void PrepareSave()
-    {
-      foreach (var ch in Channels)
-      {
-        ch.CompressImageData();
-      }
-
-      // Create or update the Unicode layer name to be consistent with the
-      // ANSI layer name.
-      var layerUnicodeNames = AdditionalInfo.Where(x => x is LayerUnicodeName);
-      if (layerUnicodeNames.Count() > 1)
-      {
-        throw new PsdInvalidException(
-          $"{nameof(Layer)} can only have one {nameof(LayerUnicodeName)}.");
-      }
-
-      var layerUnicodeName = (LayerUnicodeName) layerUnicodeNames.FirstOrDefault();
-      if (layerUnicodeName == null)
-      {
-        layerUnicodeName = new LayerUnicodeName(Name);
-        AdditionalInfo.Add(layerUnicodeName);
-      }
-      else if (layerUnicodeName.Name != Name)
-      {
-        layerUnicodeName.Name = Name;
-      }
-    }
-
-    public void Save(PsdBinaryWriter writer)
-    {
-      Util.DebugMessage(writer.BaseStream, "Save, Begin, Layer");
-
-      writer.Write(Rect);
-
-      //-----------------------------------------------------------------------
-
-      writer.Write((short)Channels.Count);
-      foreach (var ch in Channels)
-      {
-        ch.Save(writer);
-      }
-
-      //-----------------------------------------------------------------------
-
-      writer.WriteAsciiChars("8BIM");
-      writer.WriteAsciiChars(BlendModeKey);
-      writer.Write(Opacity);
-      writer.Write(Clipping);
-
-      writer.Write((byte)flags.Data);
-      writer.Write((byte)0);
-
-      //-----------------------------------------------------------------------
-
-      using (new PsdBlockLengthWriter(writer))
-      {
-        Masks.Save(writer);
-        BlendingRangesData.Save(writer);
-
-        var namePosition = writer.BaseStream.Position;
-
-        // Legacy layer name is limited to 31 bytes.  Unicode layer name
-        // can be much longer.
-        writer.WritePascalString(Name, 4, 31);
-
-        foreach (LayerInfo info in AdditionalInfo)
-        {
-          info.Save(writer,
-            globalLayerInfo: false,
-            isLargeDocument: PsdFile.IsLargeDocument);
-        }
-      }
-
-      Util.DebugMessage(writer.BaseStream, $"Save, End, Layer, {Name}");
     }
   }
 }

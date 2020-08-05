@@ -1,0 +1,18 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package>
+	<metadata>
+		<id>nordeus.psdfile</id>
+		<version>1.0.9999</version>
+		<description>PSD File parser</description>
+		<authors>Tao Yue</authors>
+		<title>PsdFile</title>
+		<owners>Igor Stojkovic</owners>
+		<projectUrl>https://github.com/Nordeus/PsdPlugin</projectUrl>
+		<iconUrl>http://artifactory.hq.nordeus.com/artifactory/nordeus-tools-local/icons/nordeus_logo.jpg</iconUrl>
+		<releaseNotes>Initial release</releaseNotes>
+		<tags>psd, parser</tags>
+	</metadata>
+	<files>
+		<file src="PsdFile\**" target="Source" />
+	</files>
+</package>

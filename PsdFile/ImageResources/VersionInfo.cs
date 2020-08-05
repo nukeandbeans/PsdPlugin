@@ -11,9 +11,6 @@
 /////////////////////////////////////////////////////////////////////////////////
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 
 namespace PhotoshopFile
 {
@@ -44,15 +41,6 @@ namespace PhotoshopFile
       ReaderName = reader.ReadUnicodeString();
       WriterName = reader.ReadUnicodeString();
       FileVersion = reader.ReadUInt32();
-    }
-
-    protected override void WriteData(PsdBinaryWriter writer)
-    {
-      writer.Write(Version);
-      writer.Write(HasRealMergedData);
-      writer.WriteUnicodeString(ReaderName);
-      writer.WriteUnicodeString(WriterName);
-      writer.Write(FileVersion);
     }
   }
 }
