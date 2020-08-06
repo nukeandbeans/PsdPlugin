@@ -15,11 +15,8 @@
 
 using System;
 using System.Collections.Generic;
-using System.Drawing;
-using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using UnityEngine;
 using Debug = System.Diagnostics.Debug;
@@ -338,6 +335,25 @@ namespace PhotoshopFile
       LoadLayers(reader, true);
       LoadGlobalLayerMask(reader, endPosition);
       LayerInfoFactory.LoadAll(reader, this, AdditionalInfo, endPosition, true);
+      
+      var names = new HashSet<string>();
+      foreach (var layer in Layers)
+      {
+        if (names.Contains(layer.Name))
+        {
+          for (var i = 0; i < 100; i++)
+          {
+            var newName = layer.Name + i;
+            if (!names.Contains(newName))
+            {
+              layer.Name = newName;
+              break;
+            }
+          }
+        }
+
+        names.Add(layer.Name);
+      }
 
       foreach (var layerInfo in AdditionalInfo)
       {

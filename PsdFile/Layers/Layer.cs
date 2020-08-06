@@ -287,6 +287,11 @@ namespace PhotoshopFile
       // read the font size
       dataReader.Seek("/FontSize ");
       FontSize = dataReader.ReadFloat();
+      
+      dataReader.Seek("/FontCaps ");
+      var caps = dataReader.ReadByte() - 48;
+      if (caps == 1) Text = Text.ToLower();
+      else if (caps == 2) Text = Text.ToUpper();
 
       // read the font fill color
       dataReader.Seek("/FillColor");

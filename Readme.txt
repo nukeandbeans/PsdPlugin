@@ -1,7 +1,23 @@
 ﻿Photoshop PSD FileType Plugin for Paint.NET
 
+Fork Description
+------------
+In this fork we removed parts of code related to writing PSD file since we are only interested in reading it.
+We also added our code for exporting layers into PNG textures and a few Unity specific functionalities.
+System.Drawing.Rectangle is replaced with UnityEngine.Rect and Size is replaced with UnityEngine.Vector2.
+In order to create a custom exported, that for example create UI elements you should extend PsdExporter
+and implement your logic in overrides to these methods:
 
-Description
+```
+void OnStart();
+void OnEnd(Exception e = null);
+
+void ExportArtLayer(Layer layer);
+void ExportTextLayer(Layer layer);
+void ExportFolderLayer(Layer layer);
+```
+
+Original Description
 ------------
 
 This plugin allows Paint.NET to load and save Photoshop .PSD files.
