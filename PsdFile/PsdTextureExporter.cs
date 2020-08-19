@@ -40,13 +40,16 @@ public class PsdTextureExporter : PsdExporter
 		AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
 	}
 
-	protected override void ExportFolderLayer(Layer layer)
+	protected override FolderExport ExportFolderLayer(Layer layer)
 	{
 		// don't create folder if exporting without subfolders
-		if (skipGeneration || ExportWithoutSubfolders) return;
+		if (skipGeneration) return FolderExport.SkipChildren;
+		if (ExportWithoutSubfolders) return FolderExport.ProcessChildren;
+		
 		var path = Path.Combine(RootFolder, GetPath(layer));
 		path = Path.Combine(path, TrimAllSpaces(layer.Name));
 		Directory.CreateDirectory(path);
+		return FolderExport.ProcessChildren;
 	}
 
 	protected override void ExportTextLayer(Layer layer) { }
