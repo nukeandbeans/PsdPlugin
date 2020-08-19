@@ -7,6 +7,12 @@ using UnityEngine;
 
 public abstract class PsdExporter
 {
+	protected enum FolderExport
+	{
+		ProcessChildren,
+		SkipChildren
+	}
+	
 	public readonly PsdFile Psd;
 
 	public PsdExporter(string asset)
@@ -55,8 +61,10 @@ public abstract class PsdExporter
 
 		if (layer.IsFolder)
 		{
-			ExportFolderLayer(layer);
-			ExportTree(layer.Children);
+			if (ExportFolderLayer(layer) == FolderExport.ProcessChildren)
+			{
+				ExportTree(layer.Children);
+			}
 		}
 		else if (layer.IsTextLayer)
 		{
@@ -72,7 +80,7 @@ public abstract class PsdExporter
 
 	protected abstract void ExportTextLayer(Layer layer);
 
-	protected abstract void ExportFolderLayer(Layer layer);
+	protected abstract FolderExport ExportFolderLayer(Layer layer);
 
 	protected static string TrimAllSpaces(string value)
 	{
