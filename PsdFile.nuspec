@@ -8,7 +8,7 @@
 		<title>PsdFile</title>
 		<owners>Igor Stojkovic</owners>
 		<projectUrl>https://github.com/Nordeus/PsdPlugin</projectUrl>
-		<iconUrl>http://artifactory.hq.nordeus.com/artifactory/nordeus-tools-local/icons/nordeus_logo.jpg</iconUrl>
+		<iconUrl>https://artifactory.hq.nordeus.com/artifactory/nordeus-tools-local/icons/nordeus_logo.jpg</iconUrl>
 		<releaseNotes>Initial release</releaseNotes>
 		<tags>psd, parser</tags>
 	</metadata>
